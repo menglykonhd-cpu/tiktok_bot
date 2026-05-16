@@ -4,6 +4,7 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 import yt_dlp
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 # Bot token from environment variable
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "")
+PORT = int(os.getenv("PORT", "5000"))
 
 if not BOT_TOKEN:
     raise ValueError("No BOT_TOKEN found in environment variables!")
@@ -696,7 +700,27 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     logger.info("Bot is starting with CANCEL/STOP command support...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    if WEBHOOK_URL:
+        parsed_url = urlparse(WEBHOOK_URL)
+        webhook_path = WEBHOOK_PATH or parsed_url.path or f"/{BOT_TOKEN}"
+        if not webhook_path.startswith("/"):
+            webhook_path = f"/{webhook_path}"
+
+        webhook_url = WEBHOOK_URL
+        if not webhook_url.startswith("https://") and not webhook_url.startswith("http://"):
+            webhook_url = f"https://{webhook_url}"
+
+        logger.info(f"Running webhook mode on port {PORT} with path {webhook_path}")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=webhook_path,
+            webhook_url=webhook_url,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
